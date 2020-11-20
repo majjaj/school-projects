@@ -1,0 +1,432 @@
+---
+title: "Week 12 : Breast cancer analysis: Machine Learning to Predict whether the cancer is benign or malignant."
+author: "Mohammed Majjaj"
+date: "11/18/2020"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## <b>Problem Statement</b>
+
+Worldwide, Breast cancer is one of the most common cancers that attacks women, it takes the lion share of new cancer cases and cancer-related deaths according to global statistics, making it a significant public health problem in today’s society.
+Early diagnosis can improve the chance of survival significantly, and it can promote timely clinical treatments to patients.
+Using Breast Cancer Wisconsin (Diagnostic) Data Set, I will try to apply statistical knowledge I accumulated during this course to build a machine learning model to predict whether a cancer is benign or malignant with a high accuracy.
+
+## <b>Research questions</b>
+
+1.	Identify the variables used in this study, is there any data cleaning or variable modification needed?
+2.	Explore the dataset for a quick exploratory analysis. central tendency and measures of dispersion?
+3.	Do we have outliers, and what should be done with them?
+4.	What are the best statistical methods to correlate this data?
+5.	What are the variables that correlate the most with the outcome with significance?
+6.	What are the variables that explains most of the variability of the outcome with significance?
+7.	What machine learning models to choose from to best predict the outcome?
+8.	Which model best predict the outcome based on accuracy?
+
+#### <b>Overview of the Data Set</b>
+
+The dataset I will use (Diagnostic Wisconsin Breast Cancer Database) is a CSV file.
+the Features are computed from a digitized image of a fine needle aspirate (FNA) of a breast mass. They describe characteristics of the cell nuclei present in the image.
+
+##### <b>Dataset information:</b>
+
+•  Dataset Characteristics: Multivariate
+•  Attribute Characteristics: Real
+•  Attribute Characteristics: Classification
+•  Number of Instances: 569
+•  Number of Attributes: 32
+•  Missing Values: No
+
+##### <b>Attribute Information:</b>
+
+1) ID number
+2) Diagnosis (M = malignant, B = benign)
+3-32)
+
+Ten real-valued features are computed for each cell nucleus:
+
+a) radius (mean of distances from center to points on the perimeter)
+b) texture (standard deviation of gray-scale values)
+c) perimeter
+d) area
+e) smoothness (local variation in radius lengths)
+f) compactness (perimeter^2 / area - 1.0)
+g) concavity (severity of concave portions of the contour)
+h) concave points (number of concave portions of the contour)
+i) symmetry
+j) fractal dimension ("coastline approximation" - 1)
+
+The mean, standard error and “worst” or largest (mean of the three largest values) of these features were computed for each image, resulting in 30 features. For instance, field 3 is Mean Radius, field 13 is Radius SE, field 23 is Worst Radius.
+
+This data set is available through Kaggle :
+https://www.kaggle.com/uciml/breast-cancer-wisconsin-data
+and is also available through the UW CS ftp server:
+ftp ftp.cs.wisc.edu
+cd math-prog/cpo-dataset/machine-learn/WDBC/
+
+
+#### <b>Data importing and cleaning steps</b>
+
+After I set my data directory will import the data set and do a preliminary investigation to see if it needs any cleaning done.
+
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+# Load the `caTools` library
+library(caTools)
+
+# Load the `data.csv` as df
+df <- read.csv("data.csv")
+
+str(df)
+
+```
+
+
+The data set is 569 obs. Of  33 variables
+
+First look I can see that I can remove the Id column.
+
+I’ve checked if there is any duplicates using function any(duplicated(data))result was False.
+
+Last column X  has no data in it; checked using function summary(data$X)  all rows are NA’s.
+
+Diagnosis need to be converted to numeric factor.
+
+will  replace M = 0 and B = 1.
+
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+#check for duplicates
+any(duplicated(df$id)) 
+
+#remove column id
+data= subset(df, select = -c(id)) 
+
+#check column X
+summary(data$X) 
+
+#remove column X
+data= subset(data, select = -c(X)) 
+
+#check for NA's
+any(is.na(data)) 
+
+data$diagnosis[data$diagnosis=='M'] = 0 # replace M=0
+data$diagnosis[data$diagnosis=='B'] = 1 # replace B=1
+
+#convert diagnisis into numeric
+data$diagnosis= as.numeric(data$diagnosis)
+
+
+str(data) #checking result
+
+```
+
+#### <b>what the data set looks like.</b> 
+
+Here is the data head and summary of the data, which gives different statistic of the variables
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+
+ summary(data) # this will describe the all statistical function of our data
+
+
+```
+
+#### <b>Understand the data</b>
+
+Let’s check how balanced is our response variable by frequency of cancer stages
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+table(data$diagnosis)
+diagnisis.percent = round(prop.table(table(data$diagnosis))*100,2)
+diagnisis.percent 
+
+```
+
+from this results we can see that there is a more number of bengin stage in this dataset of cancer which can be cured.
+so The response variable is slightly unbalanced.
+
+
+
+##### <b>Let’s look for correlation in the variables</b>
+
+Let’s check for correlations.
+
+we're looking to remove any highly correlated predictors (mutlicollinearity)
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+library(ggplot2)
+
+#remove diagnosis variable
+df_corr = cor(subset(data, select = -c(diagnosis)))
+
+corrplot::corrplot(df_corr, order = "hclust", tl.cex = 0.7, addrect = 10)
+```
+
+we can see that there are variables that are highly correlated. 
+
+On the next step, we will remove the highly correlated ones.
+
+The findcorrelation() function from caret package remove highly correlated predictors. 
+we're going to remove variables based on whose correlation is above 0.9.
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+library(caret)
+
+data.clean = subset(data, select = -c(findCorrelation(df_corr, cutoff = 0.9)))
+
+```
+
+let's check our new clean dataset
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+# add back diagnosis
+
+
+data.clean$diagnosis = data$diagnosis
+
+
+
+str(data.clean)
+
+```
+
+our new data set is 9 columns shorter.
+
+##### <b>scotter plot to overvue the data</b>
+
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+library(reshape2)
+
+#convert diagnosis into factor
+data.clean$diagnosis= as.factor(data.clean$diagnosis)
+
+
+df.m1 =data.clean
+df.m = melt(df.m1)
+
+p = ggplot(data = df.m, aes(x = variable, y = value)) + 
+   geom_boxplot(aes(fill=diagnosis), outlier.shape = NA) + facet_wrap(  ~ variable, scales="free")+ xlab("Variables") + ylab("")+ guides(fill=guide_legend(title="Group"))
+p
+
+
+```
+
+plots above shows that, the malignant diagnoses have higher scores in almost variables.
+
+#### <b>Correlations between outcome diagnosis and variables</b>
+
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+
+library(corrplot)
+
+#convert diagnosis into numeric
+data.clean$diagnosis= as.numeric(data.clean$diagnosis)
+
+dcor= cor(as.matrix(data.clean[,22]), as.matrix(data.clean[,-22]))
+
+
+corrplot::corrplot(dcor, method = "number", number.cex = .7)
+
+
+
+```
+
+
+we've converted the categorical variable diagnosis to binary form beforehand, than using the R cor with the Pearson default command will work, and the correlation will be a point-biserial correlation. 
+
+
+from results above we can see that we can remove these variable from our dataset as they have very low correlation with variable diagnosis.
+
+fractal_dimension_mean, smoothness_se, and symmetry_se.         
+
+
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+data.clean= subset(data.clean, select = -c(fractal_dimension_mean)) 
+data.clean= subset(data.clean, select = -c(smoothness_se)) 
+data.clean= subset(data.clean, select = -c(symmetry_se)) 
+
+data.clean$diagnosis= as.numeric(data.clean$diagnosis)
+
+# calculating the correlation test with confidence level 0.95% 
+corr_p = cor.mtest(data.clean, conf.level = 0.95)
+
+# calculating the correlation values
+corr_val <- cor(data.clean)
+
+
+# correlation graph 
+corrplot(corr_val,type = "lower",order="hclust", p.mat = corr_p$p, insig = "label_sig",
+         sig.level = c(.001, .01, .05), pch.cex = .5, pch.col = "yellow")
+
+
+``` 
+
+
+from the graph above you can see that we have very good significance level p>.001 for the predictor we've left.
+
+now we can start building our model to predict whether the cancer is benign or malignant.
+
+
+### <b>Model the data</b>
+
+Let’s first create a testing and training set.
+Dataset is divided into two datasets: training (70%) and testing (30%).
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+# converting diagnosis back to factor
+
+data.clean$diagnosis= as.factor(data.clean$diagnosis)
+
+head(data.clean)
+
+set.seed(1000)
+
+smp_size = floor(0.70 * nrow(data.clean))
+train_ind = sample(seq_len(nrow(data.clean)), size = smp_size)
+train = data.clean[train_ind, ]
+test = data.clean[-train_ind, ]
+
+
+
+```
+
+Let’s check how balanced is our response variable by frequency of cancer stages
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+#train$diagnosis
+prop.table(table(train$diagnosis))*100
+
+#"test$diagnosis"
+prop.table(table(test$diagnosis))*100
+
+```
+
+#### <b> machine learning </b>
+
+##### <b> Logistic regression</b>
+
+i'm going to start with a logistic regression
+
+training the model
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+fitControl = trainControl(## 10-fold CV
+  method = "cv",
+  number = 10,
+  savePredictions = TRUE)
+
+lreg=train(diagnosis~.,data=train,method="glm",family=binomial(),
+             trControl=fitControl)
+
+
+```
+
+testing the model
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+lreg_pred<-predict(lreg,test[,-19])
+cm_logistic<-confusionMatrix(lreg_pred,test$diagnosis)
+cm_logistic
+
+```
+
+##### <b> k-nearest neighbor </b>
+
+
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+control = trainControl(method='repeatedcv', 
+                        number=10, 
+                        repeats=3)
+knnFit = train(diagnosis ~ ., data = train, method = "knn", trControl = control,tuneLength = 20)
+plot(knnFit)
+     
+```
+testing the model
+
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+knnPredict = predict(knnFit,newdata = test[,-19] )
+cm_knn=confusionMatrix(knnPredict, test$diagnosis )
+cm_knn
+```
+
+##### <b> Support vector machines </b>
+
+Training the model.
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+library(e1071)
+
+learn_svm = svm(diagnosis~., data=train)
+
+
+```
+
+
+Testing the model.
+
+```{r echo=TRUE, include=TRUE, warning=FALSE}
+
+pre_svm = predict(learn_svm, test[,-19])
+cm_svm = confusionMatrix(pre_svm, test$diagnosis)
+cm_svm
+
+```
+
+
+#### <b>determining the best model</b>
+
+i have deployed several classification Machine algorithm using the predictor defined before.
+
+-  Logistic regression: had an Accuracy of 0.9532, 
+
+-  k-nearest neighbor: had an Accuracy of 0.9181, 
+
+-  Support vector machines: 0.9591,
+
+based on these finding support vector machine seems to have highest accuracy score.
+
+
+#### <b> References:</b>
+
+This data set is available through Kaggle :
+https://www.kaggle.com/uciml/breast-cancer-wisconsin-data
+
+and is also available through the UW CS ftp server:
+ftp ftp.cs.wisc.edu
+cd math-prog/cpo-dataset/machine-learn/WDBC/
+
+Breast Cancer Prediction in R retrived from : https://setscholars.net/wp-content/uploads/2019/11/Breast-Cancer-Prediction-in-R.html
+
+Wisconsin Breast Cancer Analysis with k-Nearest Neighbors (k-NN) Algorithm in R retrived from:
+https://www.engineeringbigdata.com/wisconsin-breast-cancer-analysis-with-k-nearest-neighbors-k-nn-algorithm-in-r/
+
+
+Basic Machine Learning with Cancer retrived from :
+https://www.kaggle.com/gargmanish/basic-machine-learning-with-cancer
+
+Discovering Statistics Using R, Andy Field | Jeremy Miles | Zoe Field
+R For Everyone, Jared P Lander
+
+
